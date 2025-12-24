@@ -1212,5 +1212,3 @@ func TestReconnectWithExistingSession(t *testing.T) {
 
 	client.Close()
 }
-
-
