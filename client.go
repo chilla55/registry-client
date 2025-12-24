@@ -228,14 +228,14 @@ func (c *RegistryClientV2) connect() error {
 	_, _ = conn.Write([]byte(registerCmd))
 
 	if !scanner.Scan() {
-		conn.Close()
+		_ = conn.Close()
 		return fmt.Errorf("no response from registry")
 	}
 
 	response := scanner.Text()
 	parts := strings.Split(response, "|")
 	if len(parts) < 2 || parts[0] != "ACK" {
-		conn.Close()
+		_ = conn.Close()
 		return fmt.Errorf("registration failed: %s", response)
 	}
 
@@ -848,7 +848,7 @@ func (c *RegistryClientV2) MaintenanceEnterWithURL(target string, maintenancePag
 	// Set read deadline on the underlying connection
 	if conn, ok := c.conn.(interface{ SetReadDeadline(time.Time) error }); ok {
 		_ = conn.SetReadDeadline(deadline)
-		defer conn.SetReadDeadline(time.Time{})
+		defer func() { _ = conn.SetReadDeadline(time.Time{}) }()
 	}
 
 	// Try to read ACK response
@@ -981,7 +981,7 @@ func (c *RegistryClientV2) MaintenanceExit(target string) error {
 	response := c.scanner.Text()
 	if response != "ACK" {
 		if strings.HasPrefix(response, "ERROR") {
-			c.errorEvent("Proxy rejected maintenance exit", fmt.Errorf(response), nil)
+			c.errorEvent("Proxy rejected maintenance exit", fmt.Errorf("%s", response), nil)
 			return fmt.Errorf("maintenance exit failed: %s", response)
 		}
 	}
@@ -990,7 +990,7 @@ func (c *RegistryClientV2) MaintenanceExit(target string) error {
 	waitTimeout := 10 * time.Second
 	if conn, ok := c.conn.(interface{ SetReadDeadline(time.Time) error }); ok {
 		_ = conn.SetReadDeadline(time.Now().Add(waitTimeout))
-		defer conn.SetReadDeadline(time.Time{})
+		defer func() { _ = conn.SetReadDeadline(time.Time{}) }()
 	}
 
 	for c.scanner.Scan() {
@@ -1009,7 +1009,7 @@ func (c *RegistryClientV2) MaintenanceExit(target string) error {
 			return nil
 		}
 		if strings.HasPrefix(event, "ERROR") {
-			c.errorEvent("Proxy error during maintenance exit", fmt.Errorf(event), nil)
+			c.errorEvent("Proxy error during maintenance exit", fmt.Errorf("%s", event), nil)
 			return fmt.Errorf("maintenance exit failed: %s", event)
 		}
 	}
@@ -1152,7 +1152,7 @@ func (c *RegistryClientV2) Shutdown() error {
 		return fmt.Errorf("shutdown failed: %s", response)
 	}
 
-	c.conn.Close()
+	_ = c.conn.Close()
 
 	// Emit disconnected event
 	c.emit(Event{
@@ -1168,7 +1168,7 @@ func (c *RegistryClientV2) Shutdown() error {
 func (c *RegistryClientV2) Close() {
 	close(c.done)
 	if c.conn != nil {
-		c.conn.Close()
+		_ = c.conn.Close()
 	}
 	c.emit(Event{
 		Type:      EventDisconnected,
@@ -1317,7 +1317,7 @@ func (c *RegistryClientV2) reconnectWithBackoff(maxQuickRetries int, ticker **ti
 func (c *RegistryClientV2) reconnect() error {
 	// Close old connection if it exists
 	if c.conn != nil {
-		c.conn.Close()
+		_ = c.conn.Close()
 	}
 
 	// Detect container IP
@@ -1348,7 +1348,8 @@ func (c *RegistryClientV2) reconnect() error {
 
 		if scanner.Scan() {
 			response := scanner.Text()
-			if response == "OK" {
+			switch response {
+			case "OK":
 				// Session restored successfully, routes reactivated
 				fmt.Printf("[client] Session %s restored, routes reactivated\n", c.sessionID)
 				c.conn = conn
@@ -1361,7 +1362,7 @@ func (c *RegistryClientV2) reconnect() error {
 					Timestamp: time.Now(),
 				})
 				return nil
-			} else if response == "REREGISTER" {
+			case "REREGISTER":
 				// Session expired, need to re-register
 				fmt.Printf("[client] Session expired, re-registering...\n")
 				// Fall through to registration
@@ -1375,14 +1376,14 @@ func (c *RegistryClientV2) reconnect() error {
 	_, _ = conn.Write([]byte(registerCmd))
 
 	if !scanner.Scan() {
-		conn.Close()
+		_ = conn.Close()
 		return fmt.Errorf("no response from registry")
 	}
 
 	response := scanner.Text()
 	parts := strings.Split(response, "|")
 	if len(parts) < 2 || parts[0] != "ACK" {
-		conn.Close()
+		_ = conn.Close()
 		return fmt.Errorf("registration failed: %s", response)
 	}
 

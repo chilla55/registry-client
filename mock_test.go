@@ -76,101 +76,101 @@ func (m *MockRegistry) handleConnection(conn net.Conn) {
 			if len(parts) >= 4 {
 				sessionID := "test-session-123"
 				response := fmt.Sprintf("ACK|%s\n", sessionID)
-				conn.Write([]byte(response))
+				_, _ = conn.Write([]byte(response))
 			}
 
 		case "RECONNECT":
 			// RECONNECT|sessionID
-			conn.Write([]byte("OK\n"))
+			_, _ = conn.Write([]byte("OK\n"))
 
 		case "PING":
-			conn.Write([]byte("PONG\n"))
+			_, _ = conn.Write([]byte("PONG\n"))
 
 		case "ROUTE_ADD":
 			// ROUTE_ADD|sessionID|domains|path|backendURL|priority
 			if len(parts) >= 6 {
 				routeID := "route-001"
 				response := fmt.Sprintf("ROUTE_OK|%s\n", routeID)
-				conn.Write([]byte(response))
+				_, _ = conn.Write([]byte(response))
 			}
 
 		case "ROUTE_LIST":
-			conn.Write([]byte("OK|[]\n"))
+			_, _ = conn.Write([]byte("OK|[]\n"))
 
 		case "ROUTE_REMOVE":
-			conn.Write([]byte("OK\n"))
+			_, _ = conn.Write([]byte("OK\n"))
 
 		case "ROUTE_UPDATE":
-			conn.Write([]byte("OK\n"))
+			_, _ = conn.Write([]byte("OK\n"))
 
 		case "HEADERS_SET":
-			conn.Write([]byte("OK\n"))
+			_, _ = conn.Write([]byte("OK\n"))
 
 		case "OPTIONS_SET":
-			conn.Write([]byte("OK\n"))
+			_, _ = conn.Write([]byte("OK\n"))
 
 		case "HEALTH_SET":
-			conn.Write([]byte("OK\n"))
+			_, _ = conn.Write([]byte("OK\n"))
 
 		case "RATELIMIT_SET":
-			conn.Write([]byte("OK\n"))
+			_, _ = conn.Write([]byte("OK\n"))
 
 		case "CIRCUIT_BREAKER_SET":
-			conn.Write([]byte("OK\n"))
+			_, _ = conn.Write([]byte("OK\n"))
 
 		case "CONFIG_VALIDATE":
-			conn.Write([]byte("OK\n"))
+			_, _ = conn.Write([]byte("OK\n"))
 
 		case "CONFIG_APPLY":
-			conn.Write([]byte("OK\n"))
+			_, _ = conn.Write([]byte("OK\n"))
 
 		case "CONFIG_ROLLBACK":
-			conn.Write([]byte("OK\n"))
+			_, _ = conn.Write([]byte("OK\n"))
 
 		case "CONFIG_DIFF":
-			conn.Write([]byte("OK|{}\n"))
+			_, _ = conn.Write([]byte("OK|{}\n"))
 
 		case "DRAIN_START":
 			completion := time.Now().Add(30 * time.Second).Format(time.RFC3339)
 			response := fmt.Sprintf("DRAIN_OK|%s\n", completion)
-			conn.Write([]byte(response))
+			_, _ = conn.Write([]byte(response))
 
 		case "DRAIN_STATUS":
-			conn.Write([]byte("OK|{\"active\":false}\n"))
+			_, _ = conn.Write([]byte("OK|{\"active\":false}\n"))
 
 		case "DRAIN_CANCEL":
-			conn.Write([]byte("OK\n"))
+			_, _ = conn.Write([]byte("OK\n"))
 
 		case "MAINT_ENTER":
-			conn.Write([]byte("ACK\n"))
+			_, _ = conn.Write([]byte("ACK\n"))
 			// Send MAINT_OK confirmation after a brief delay
 			go func() {
 				time.Sleep(50 * time.Millisecond)
-				conn.Write([]byte("MAINT_OK|ALL\n"))
+				_, _ = conn.Write([]byte("MAINT_OK|ALL\n"))
 			}()
 
 		case "MAINT_EXIT":
-			conn.Write([]byte("ACK\n"))
+			_, _ = conn.Write([]byte("ACK\n"))
 			// Send MAINT_OK confirmation
 			go func() {
 				time.Sleep(50 * time.Millisecond)
-				conn.Write([]byte("MAINT_OK|ALL\n"))
+				_, _ = conn.Write([]byte("MAINT_OK|ALL\n"))
 			}()
 
 		case "MAINT_STATUS":
-			conn.Write([]byte("OK|{\"active\":false}\n"))
+			_, _ = conn.Write([]byte("OK|{\"active\":false}\n"))
 
 		case "STATS_GET":
-			conn.Write([]byte("OK|[]\n"))
+			_, _ = conn.Write([]byte("OK|[]\n"))
 
 		case "BACKEND_TEST":
-			conn.Write([]byte("OK|{\"reachable\":true}\n"))
+			_, _ = conn.Write([]byte("OK|{\"reachable\":true}\n"))
 
 		case "SESSION_INFO":
-			conn.Write([]byte("OK|{\"session_id\":\"test-session-123\"}\n"))
+			_, _ = conn.Write([]byte("OK|{\"session_id\":\"test-session-123\"}\n"))
 
 		case "CLIENT_SHUTDOWN":
-			conn.Write([]byte("OK\n"))
+			_, _ = conn.Write([]byte("OK\n"))
 			return
 
 		default:
@@ -181,10 +181,10 @@ func (m *MockRegistry) handleConnection(conn net.Conn) {
 
 // Close closes the mock registry
 func (m *MockRegistry) Close() {
-	m.listener.Close()
+	_ = m.listener.Close()
 	m.mu.Lock()
 	for _, conn := range m.connections {
-		conn.Close()
+		_ = conn.Close()
 	}
 	m.mu.Unlock()
 }
