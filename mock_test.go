@@ -212,9 +212,12 @@ func TestInitWithMockRegistry(t *testing.T) {
 		true,
 	)
 
+	var mu sync.Mutex
 	connectedReceived := false
 	client.On(EventConnected, func(event Event) {
+		mu.Lock()
 		connectedReceived = true
+		mu.Unlock()
 	})
 
 	// Init without cleanup to avoid route list/remove calls
@@ -226,9 +229,11 @@ func TestInitWithMockRegistry(t *testing.T) {
 
 	time.Sleep(100 * time.Millisecond)
 
+	mu.Lock()
 	if !connectedReceived {
 		t.Error("Expected connected event")
 	}
+	mu.Unlock()
 
 	if client.sessionID == "" {
 		t.Error("Expected non-empty session ID")
@@ -289,12 +294,15 @@ func TestAddRouteWithMockRegistry(t *testing.T) {
 	}
 	defer client.Close()
 
+	var mu sync.Mutex
 	routeAddedReceived := false
 	var routeData map[string]interface{}
 
 	client.On(EventRouteAdded, func(event Event) {
+		mu.Lock()
 		routeAddedReceived = true
 		routeData = event.Data
+		mu.Unlock()
 	})
 
 	routeID, err := client.AddRoute(
@@ -314,6 +322,7 @@ func TestAddRouteWithMockRegistry(t *testing.T) {
 
 	time.Sleep(100 * time.Millisecond)
 
+	mu.Lock()
 	if !routeAddedReceived {
 		t.Error("Expected route added event")
 	}
@@ -321,6 +330,7 @@ func TestAddRouteWithMockRegistry(t *testing.T) {
 	if routeData["route_id"] != routeID {
 		t.Errorf("Expected route_id='%s', got '%v'", routeID, routeData["route_id"])
 	}
+	mu.Unlock()
 }
 
 func TestListRoutesWithMockRegistry(t *testing.T) {
@@ -433,9 +443,12 @@ func TestSetHealthCheckWithMockRegistry(t *testing.T) {
 	}
 	defer client.Close()
 
+	var mu sync.Mutex
 	healthCheckReceived := false
 	client.On(EventHealthCheckSet, func(event Event) {
+		mu.Lock()
 		healthCheckReceived = true
+		mu.Unlock()
 	})
 
 	err = client.SetHealthCheck("route-001", "/health", "30s", "5s")
@@ -445,9 +458,11 @@ func TestSetHealthCheckWithMockRegistry(t *testing.T) {
 
 	time.Sleep(100 * time.Millisecond)
 
+	mu.Lock()
 	if !healthCheckReceived {
 		t.Error("Expected health check set event")
 	}
+	mu.Unlock()
 }
 
 func TestApplyConfigWithMockRegistry(t *testing.T) {
@@ -472,9 +487,12 @@ func TestApplyConfigWithMockRegistry(t *testing.T) {
 	}
 	defer client.Close()
 
+	var mu sync.Mutex
 	configAppliedReceived := false
 	client.On(EventConfigApplied, func(event Event) {
+		mu.Lock()
 		configAppliedReceived = true
+		mu.Unlock()
 	})
 
 	err = client.ApplyConfig()
@@ -484,9 +502,11 @@ func TestApplyConfigWithMockRegistry(t *testing.T) {
 
 	time.Sleep(100 * time.Millisecond)
 
+	mu.Lock()
 	if !configAppliedReceived {
 		t.Error("Expected config applied event")
 	}
+	mu.Unlock()
 }
 
 func TestShutdownWithMockRegistry(t *testing.T) {
@@ -510,9 +530,12 @@ func TestShutdownWithMockRegistry(t *testing.T) {
 		t.Fatalf("Init failed: %v", err)
 	}
 
+	var mu sync.Mutex
 	disconnectedReceived := false
 	client.On(EventDisconnected, func(event Event) {
+		mu.Lock()
 		disconnectedReceived = true
+		mu.Unlock()
 	})
 
 	err = client.Shutdown()
@@ -522,9 +545,11 @@ func TestShutdownWithMockRegistry(t *testing.T) {
 
 	time.Sleep(100 * time.Millisecond)
 
+	mu.Lock()
 	if !disconnectedReceived {
 		t.Error("Expected disconnected event")
 	}
+	mu.Unlock()
 }
 
 func TestRemoveRouteWithMockRegistry(t *testing.T) {
@@ -970,9 +995,12 @@ func TestMaintenanceEnterWithURLMockRegistry(t *testing.T) {
 	}
 	defer client.Close()
 
+	var mu sync.Mutex
 	maintenanceReceived := false
 	client.On(EventMaintenanceEntered, func(event Event) {
+		mu.Lock()
 		maintenanceReceived = true
+		mu.Unlock()
 	})
 
 	err = client.MaintenanceEnterWithURL("ALL", "http://maintenance.example.com")
@@ -982,9 +1010,11 @@ func TestMaintenanceEnterWithURLMockRegistry(t *testing.T) {
 
 	time.Sleep(200 * time.Millisecond)
 
+	mu.Lock()
 	if !maintenanceReceived {
 		t.Error("Expected maintenance entered event")
 	}
+	mu.Unlock()
 
 	if !client.IsInMaintenanceMode() {
 		t.Error("Expected client to be in maintenance mode")

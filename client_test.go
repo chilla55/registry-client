@@ -2,6 +2,7 @@ package registryclient
 
 import (
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 )
@@ -86,13 +87,16 @@ func TestEventHandlers(t *testing.T) {
 		false,
 	)
 
+	var mu sync.Mutex
 	eventReceived := false
 	var receivedEvent Event
 
 	// Register an event handler
 	client.On(EventConnected, func(event Event) {
+		mu.Lock()
 		eventReceived = true
 		receivedEvent = event
+		mu.Unlock()
 	})
 
 	// Emit an event
@@ -110,6 +114,7 @@ func TestEventHandlers(t *testing.T) {
 	// Wait a bit for goroutine to process
 	time.Sleep(50 * time.Millisecond)
 
+	mu.Lock()
 	if !eventReceived {
 		t.Error("Expected event to be received")
 	}
@@ -117,6 +122,7 @@ func TestEventHandlers(t *testing.T) {
 	if receivedEvent.Type != EventConnected {
 		t.Errorf("Expected EventConnected, got %s", receivedEvent.Type)
 	}
+	mu.Unlock()
 
 	// Test removing handlers
 	client.Off(EventConnected)
@@ -141,15 +147,20 @@ func TestMultipleEventHandlers(t *testing.T) {
 		false,
 	)
 
+	var mu sync.Mutex
 	handler1Called := false
 	handler2Called := false
 
 	client.On(EventLog, func(event Event) {
+		mu.Lock()
 		handler1Called = true
+		mu.Unlock()
 	})
 
 	client.On(EventLog, func(event Event) {
+		mu.Lock()
 		handler2Called = true
+		mu.Unlock()
 	})
 
 	client.emit(Event{
@@ -160,6 +171,7 @@ func TestMultipleEventHandlers(t *testing.T) {
 
 	time.Sleep(50 * time.Millisecond)
 
+	mu.Lock()
 	if !handler1Called {
 		t.Error("Expected handler1 to be called")
 	}
@@ -167,6 +179,7 @@ func TestMultipleEventHandlers(t *testing.T) {
 	if !handler2Called {
 		t.Error("Expected handler2 to be called")
 	}
+	mu.Unlock()
 }
 
 // TestEventTypes tests all event type constants
@@ -369,50 +382,69 @@ func TestLoggingMethods(t *testing.T) {
 		true, // debug enabled
 	)
 
+	var mu sync.Mutex
 	logReceived := false
 	errorReceived := false
 
 	client.On(EventLog, func(event Event) {
+		mu.Lock()
 		logReceived = true
+		mu.Unlock()
 	})
 
 	client.On(EventError, func(event Event) {
+		mu.Lock()
 		errorReceived = true
+		mu.Unlock()
 	})
 
 	// Test debug log
 	client.logDebug("Debug message: %s", "test")
 	time.Sleep(50 * time.Millisecond)
+	mu.Lock()
 	if !logReceived {
 		t.Error("Expected log event for debug message")
 	}
+	mu.Unlock()
 
 	// Test info log
+	mu.Lock()
 	logReceived = false
+	mu.Unlock()
 	client.logInfo("Info message: %s", "test")
 	time.Sleep(50 * time.Millisecond)
+	mu.Lock()
 	if !logReceived {
 		t.Error("Expected log event for info message")
 	}
+	mu.Unlock()
 
 	// Test warn log
+	mu.Lock()
 	logReceived = false
+	mu.Unlock()
 	client.logWarn("Warning message: %s", "test")
 	time.Sleep(50 * time.Millisecond)
+	mu.Lock()
 	if !logReceived {
 		t.Error("Expected log event for warn message")
 	}
+	mu.Unlock()
 
 	// Test error log
+	mu.Lock()
 	logReceived = false
+	mu.Unlock()
 	client.logError("Error message: %s", "test")
 	time.Sleep(50 * time.Millisecond)
+	mu.Lock()
 	if !logReceived {
 		t.Error("Expected log event for error message")
 	}
 	if !errorReceived {
 		t.Error("Expected error event for error message")
 	}
+	mu.Unlock()
 }
 
 // TestDebugLogging tests that debug logs are suppressed when debug=false
@@ -426,11 +458,14 @@ func TestDebugLogging(t *testing.T) {
 		false, // debug disabled
 	)
 
+	var mu sync.Mutex
 	logReceived := false
 
 	client.On(EventLog, func(event Event) {
 		if event.Data["level"] == "debug" {
+			mu.Lock()
 			logReceived = true
+			mu.Unlock()
 		}
 	})
 
@@ -438,9 +473,11 @@ func TestDebugLogging(t *testing.T) {
 	client.logDebug("Debug message")
 	time.Sleep(50 * time.Millisecond)
 
+	mu.Lock()
 	if logReceived {
 		t.Error("Expected debug log to be suppressed when debug=false")
 	}
+	mu.Unlock()
 
 	// Info log should still work
 	client.logInfo("Info message")
@@ -450,15 +487,19 @@ func TestDebugLogging(t *testing.T) {
 	infoReceived := false
 	client.On(EventLog, func(event Event) {
 		if event.Data["level"] == "info" {
+			mu.Lock()
 			infoReceived = true
+			mu.Unlock()
 		}
 	})
 
 	client.logInfo("Info message 2")
 	time.Sleep(50 * time.Millisecond)
+	mu.Lock()
 	if !infoReceived {
 		t.Error("Expected info log to work when debug=false")
 	}
+	mu.Unlock()
 }
 
 // TestClose tests the Close method
@@ -472,17 +513,22 @@ func TestClose(t *testing.T) {
 		false,
 	)
 
+	var mu sync.Mutex
 	disconnectReceived := false
 	client.On(EventDisconnected, func(event Event) {
+		mu.Lock()
 		disconnectReceived = true
+		mu.Unlock()
 	})
 
 	client.Close()
 	time.Sleep(50 * time.Millisecond)
 
+	mu.Lock()
 	if !disconnectReceived {
 		t.Error("Expected disconnect event")
 	}
+	mu.Unlock()
 
 	// Check that done channel is closed
 	select {
@@ -504,12 +550,15 @@ func TestLogEvent(t *testing.T) {
 		false,
 	)
 
+	var mu sync.Mutex
 	eventReceived := false
 	var receivedData map[string]interface{}
 
 	client.On(EventLog, func(event Event) {
+		mu.Lock()
 		eventReceived = true
 		receivedData = event.Data
+		mu.Unlock()
 	})
 
 	testData := map[string]interface{}{
@@ -519,6 +568,7 @@ func TestLogEvent(t *testing.T) {
 	client.logEvent("info", "Test message", testData)
 	time.Sleep(50 * time.Millisecond)
 
+	mu.Lock()
 	if !eventReceived {
 		t.Error("Expected log event")
 	}
@@ -534,6 +584,7 @@ func TestLogEvent(t *testing.T) {
 	if receivedData["custom"] != "value" {
 		t.Errorf("Expected custom='value', got '%v'", receivedData["custom"])
 	}
+	mu.Unlock()
 }
 
 // TestErrorEvent tests the errorEvent method
@@ -547,12 +598,15 @@ func TestErrorEvent(t *testing.T) {
 		false,
 	)
 
+	var mu sync.Mutex
 	eventReceived := false
 	var receivedData map[string]interface{}
 
 	client.On(EventError, func(event Event) {
+		mu.Lock()
 		eventReceived = true
 		receivedData = event.Data
+		mu.Unlock()
 	})
 
 	testData := map[string]interface{}{
@@ -562,6 +616,7 @@ func TestErrorEvent(t *testing.T) {
 	client.errorEvent("Test error", nil, testData)
 	time.Sleep(50 * time.Millisecond)
 
+	mu.Lock()
 	if !eventReceived {
 		t.Error("Expected error event")
 	}
@@ -573,6 +628,7 @@ func TestErrorEvent(t *testing.T) {
 	if receivedData["code"] != 500 {
 		t.Errorf("Expected code=500, got '%v'", receivedData["code"])
 	}
+	mu.Unlock()
 }
 
 // TestMaintenanceEnterNilConnection tests maintenance mode with no connection
@@ -586,14 +642,17 @@ func TestMaintenanceEnterNilConnection(t *testing.T) {
 		false,
 	)
 
+	var mu sync.Mutex
 	maintenanceEventReceived := false
 	var receivedMode string
 
 	client.On(EventMaintenanceEntered, func(event Event) {
+		mu.Lock()
 		maintenanceEventReceived = true
 		if mode, ok := event.Data["mode"].(string); ok {
 			receivedMode = mode
 		}
+		mu.Unlock()
 	})
 
 	// Try to enter maintenance with no connection
@@ -605,6 +664,7 @@ func TestMaintenanceEnterNilConnection(t *testing.T) {
 
 	time.Sleep(50 * time.Millisecond)
 
+	mu.Lock()
 	if !maintenanceEventReceived {
 		t.Error("Expected maintenance entered event")
 	}
@@ -612,6 +672,7 @@ func TestMaintenanceEnterNilConnection(t *testing.T) {
 	if receivedMode != "local" {
 		t.Errorf("Expected mode='local', got '%s'", receivedMode)
 	}
+	mu.Unlock()
 
 	if !client.IsInMaintenanceMode() {
 		t.Error("Expected client to be in maintenance mode")
@@ -635,10 +696,13 @@ func TestMaintenanceExitNilConnection(t *testing.T) {
 	client.maintenanceTarget = "ALL"
 	client.configMu.Unlock()
 
+	var mu sync.Mutex
 	maintenanceExitEventReceived := false
 
 	client.On(EventMaintenanceExited, func(event Event) {
+		mu.Lock()
 		maintenanceExitEventReceived = true
+		mu.Unlock()
 	})
 
 	// Try to exit maintenance with no connection
@@ -650,9 +714,11 @@ func TestMaintenanceExitNilConnection(t *testing.T) {
 
 	time.Sleep(50 * time.Millisecond)
 
+	mu.Lock()
 	if !maintenanceExitEventReceived {
 		t.Error("Expected maintenance exited event")
 	}
+	mu.Unlock()
 
 	if client.IsInMaintenanceMode() {
 		t.Error("Expected client to not be in maintenance mode")
@@ -772,18 +838,25 @@ func TestMultipleOnHandlersSameEvent(t *testing.T) {
 		false,
 	)
 
+	var mu sync.Mutex
 	count := 0
 
 	client.On(EventLog, func(event Event) {
+		mu.Lock()
 		count++
+		mu.Unlock()
 	})
 
 	client.On(EventLog, func(event Event) {
+		mu.Lock()
 		count++
+		mu.Unlock()
 	})
 
 	client.On(EventLog, func(event Event) {
+		mu.Lock()
 		count++
+		mu.Unlock()
 	})
 
 	client.emit(Event{
@@ -794,9 +867,11 @@ func TestMultipleOnHandlersSameEvent(t *testing.T) {
 
 	time.Sleep(50 * time.Millisecond)
 
+	mu.Lock()
 	if count != 3 {
 		t.Errorf("Expected 3 handlers to be called, got %d", count)
 	}
+	mu.Unlock()
 }
 
 // TestEventStructure tests the Event structure
@@ -919,9 +994,12 @@ func TestEventTimestamps(t *testing.T) {
 		false,
 	)
 
+	var mu sync.Mutex
 	var timestamp time.Time
 	client.On(EventLog, func(event Event) {
+		mu.Lock()
 		timestamp = event.Timestamp
+		mu.Unlock()
 	})
 
 	before := time.Now()
@@ -930,6 +1008,7 @@ func TestEventTimestamps(t *testing.T) {
 
 	time.Sleep(50 * time.Millisecond)
 
+	mu.Lock()
 	if timestamp.IsZero() {
 		t.Error("Expected non-zero timestamp")
 	}
@@ -937,6 +1016,7 @@ func TestEventTimestamps(t *testing.T) {
 	if timestamp.Before(before) || timestamp.After(after) {
 		t.Error("Expected timestamp to be within test execution time")
 	}
+	mu.Unlock()
 }
 
 // TestErrorEventWithError tests errorEvent with an actual error
@@ -950,12 +1030,15 @@ func TestErrorEventWithError(t *testing.T) {
 		false,
 	)
 
+	var mu sync.Mutex
 	eventReceived := false
 	var receivedData map[string]interface{}
 
 	client.On(EventError, func(event Event) {
+		mu.Lock()
 		eventReceived = true
 		receivedData = event.Data
+		mu.Unlock()
 	})
 
 	testData := map[string]interface{}{
@@ -966,6 +1049,7 @@ func TestErrorEventWithError(t *testing.T) {
 	client.errorEvent("Connection error", testError, testData)
 	time.Sleep(50 * time.Millisecond)
 
+	mu.Lock()
 	if !eventReceived {
 		t.Error("Expected error event")
 	}
@@ -973,6 +1057,7 @@ func TestErrorEventWithError(t *testing.T) {
 	if receivedData["error"] != "connection refused" {
 		t.Errorf("Expected error='connection refused', got '%v'", receivedData["error"])
 	}
+	mu.Unlock()
 }
 
 // TestLogEventWithNilData tests logEvent with nil data
@@ -986,17 +1071,21 @@ func TestLogEventWithNilData(t *testing.T) {
 		false,
 	)
 
+	var mu sync.Mutex
 	eventReceived := false
 	var receivedData map[string]interface{}
 
 	client.On(EventLog, func(event Event) {
+		mu.Lock()
 		eventReceived = true
 		receivedData = event.Data
+		mu.Unlock()
 	})
 
 	client.logEvent("info", "Test with nil data", nil)
 	time.Sleep(50 * time.Millisecond)
 
+	mu.Lock()
 	if !eventReceived {
 		t.Error("Expected log event")
 	}
@@ -1008,4 +1097,5 @@ func TestLogEventWithNilData(t *testing.T) {
 	if receivedData["level"] != "info" {
 		t.Errorf("Expected level='info', got '%v'", receivedData["level"])
 	}
+	mu.Unlock()
 }
