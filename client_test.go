@@ -906,10 +906,6 @@ func TestStoredRoutesInitialization(t *testing.T) {
 	if len(client.storedRoutes) != 0 {
 		t.Errorf("Expected empty storedRoutes, got length %d", len(client.storedRoutes))
 	}
-
-	if cap(client.storedRoutes) < 0 {
-		t.Error("Expected valid capacity for storedRoutes")
-	}
 }
 
 // TestEventTimestamps tests that event timestamps are set correctly

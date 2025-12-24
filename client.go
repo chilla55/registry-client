@@ -145,7 +145,7 @@ func getContainerIP() string {
 		}
 	}
 
-	fmt.Printf("[client] Warning: no non-loopback IP found\n")
+	fmt.Print("[client] Warning: no non-loopback IP found\n")
 	return ""
 }
 
@@ -216,8 +216,8 @@ func (c *RegistryClientV2) connect() error {
 
 	// Enable TCP keepalive on client side
 	if tcpConn, ok := conn.(*net.TCPConn); ok {
-		tcpConn.SetKeepAlive(true)
-		tcpConn.SetKeepAlivePeriod(30 * time.Second)
+		_ = tcpConn.SetKeepAlive(true)
+		_ = tcpConn.SetKeepAlivePeriod(30 * time.Second)
 	}
 
 	scanner := bufio.NewScanner(conn)
@@ -225,7 +225,7 @@ func (c *RegistryClientV2) connect() error {
 	// Register
 	metadataJSON, _ := json.Marshal(c.metadata)
 	registerCmd := fmt.Sprintf("REGISTER|%s|%s|%d|%s\n", c.serviceName, c.instanceName, c.maintenancePort, string(metadataJSON))
-	conn.Write([]byte(registerCmd))
+	_, _ = conn.Write([]byte(registerCmd))
 
 	if !scanner.Scan() {
 		conn.Close()
@@ -336,7 +336,7 @@ func (c *RegistryClientV2) errorEvent(message string, err error, data map[string
 // CleanupOldRoutes removes all routes from previous sessions
 // This is useful when restarting to avoid stale route configurations
 func (c *RegistryClientV2) CleanupOldRoutes() error {
-	fmt.Printf("[client] Checking for old routes to cleanup...\n")
+	fmt.Print("[client] Checking for old routes to cleanup...\n")
 
 	// List all current routes
 	routes, err := c.ListRoutes()
@@ -345,7 +345,7 @@ func (c *RegistryClientV2) CleanupOldRoutes() error {
 	}
 
 	if len(routes) == 0 {
-		fmt.Printf("[client] No old routes found\n")
+		fmt.Print("[client] No old routes found\n")
 		return nil
 	}
 
@@ -369,7 +369,7 @@ func (c *RegistryClientV2) CleanupOldRoutes() error {
 		return fmt.Errorf("failed to apply route cleanup: %w", err)
 	}
 
-	fmt.Printf("[client] Old routes cleaned up successfully\n")
+	fmt.Print("[client] Old routes cleaned up successfully\n")
 	return nil
 }
 
@@ -390,7 +390,7 @@ func (c *RegistryClientV2) AddRoute(domains []string, path string, backendURL st
 	// Send to registry
 	domainStr := strings.Join(domains, ",")
 	cmd := fmt.Sprintf("ROUTE_ADD|%s|%s|%s|%s|%d\n", c.sessionID, domainStr, path, backendURL, priority)
-	c.conn.Write([]byte(cmd))
+	_, _ = c.conn.Write([]byte(cmd))
 
 	if !c.scanner.Scan() {
 		return "", fmt.Errorf("no response from registry")
@@ -436,7 +436,7 @@ func (c *RegistryClientV2) AddRoute(domains []string, path string, backendURL st
 func (c *RegistryClientV2) AddRouteBulk(routes []map[string]interface{}) ([]map[string]string, error) {
 	routesJSON, _ := json.Marshal(routes)
 	cmd := fmt.Sprintf("ROUTE_ADD_BULK|%s|%s\n", c.sessionID, string(routesJSON))
-	c.conn.Write([]byte(cmd))
+	_, _ = c.conn.Write([]byte(cmd))
 
 	if !c.scanner.Scan() {
 		return nil, fmt.Errorf("no response from registry")
@@ -450,7 +450,7 @@ func (c *RegistryClientV2) AddRouteBulk(routes []map[string]interface{}) ([]map[
 
 	var results []map[string]string
 	if len(parts) > 1 {
-		json.Unmarshal([]byte(parts[1]), &results)
+		_ = json.Unmarshal([]byte(parts[1]), &results)
 	}
 
 	return results, nil
@@ -459,7 +459,7 @@ func (c *RegistryClientV2) AddRouteBulk(routes []map[string]interface{}) ([]map[
 // ListRoutes gets all routes (active and staged)
 func (c *RegistryClientV2) ListRoutes() ([]interface{}, error) {
 	cmd := fmt.Sprintf("ROUTE_LIST|%s\n", c.sessionID)
-	c.conn.Write([]byte(cmd))
+	_, _ = c.conn.Write([]byte(cmd))
 
 	if !c.scanner.Scan() {
 		return nil, fmt.Errorf("no response from registry")
@@ -473,7 +473,7 @@ func (c *RegistryClientV2) ListRoutes() ([]interface{}, error) {
 
 	var routes []interface{}
 	if len(parts) > 1 {
-		json.Unmarshal([]byte(parts[1]), &routes)
+		_ = json.Unmarshal([]byte(parts[1]), &routes)
 	}
 
 	return routes, nil
@@ -482,7 +482,7 @@ func (c *RegistryClientV2) ListRoutes() ([]interface{}, error) {
 // RemoveRoute removes a route
 func (c *RegistryClientV2) RemoveRoute(routeID string) error {
 	cmd := fmt.Sprintf("ROUTE_REMOVE|%s|%s\n", c.sessionID, routeID)
-	c.conn.Write([]byte(cmd))
+	_, _ = c.conn.Write([]byte(cmd))
 
 	if !c.scanner.Scan() {
 		return fmt.Errorf("no response from registry")
@@ -499,7 +499,7 @@ func (c *RegistryClientV2) RemoveRoute(routeID string) error {
 // UpdateRoute updates a route field
 func (c *RegistryClientV2) UpdateRoute(routeID string, field string, value string) error {
 	cmd := fmt.Sprintf("ROUTE_UPDATE|%s|%s|%s|%s\n", c.sessionID, routeID, field, value)
-	c.conn.Write([]byte(cmd))
+	_, _ = c.conn.Write([]byte(cmd))
 
 	if !c.scanner.Scan() {
 		return fmt.Errorf("no response from registry")
@@ -516,7 +516,7 @@ func (c *RegistryClientV2) UpdateRoute(routeID string, field string, value strin
 // SetHeaders sets response headers
 func (c *RegistryClientV2) SetHeaders(headerName string, headerValue string) error {
 	cmd := fmt.Sprintf("HEADERS_SET|%s|ALL|%s|%s\n", c.sessionID, headerName, headerValue)
-	c.conn.Write([]byte(cmd))
+	_, _ = c.conn.Write([]byte(cmd))
 
 	if !c.scanner.Scan() {
 		return fmt.Errorf("no response from registry")
@@ -538,7 +538,7 @@ func (c *RegistryClientV2) SetOptions(key string, value string) error {
 	c.configMu.Unlock()
 
 	cmd := fmt.Sprintf("OPTIONS_SET|%s|ALL|%s|%s\n", c.sessionID, key, value)
-	c.conn.Write([]byte(cmd))
+	_, _ = c.conn.Write([]byte(cmd))
 
 	if !c.scanner.Scan() {
 		return fmt.Errorf("no response from registry")
@@ -565,7 +565,7 @@ func (c *RegistryClientV2) SetHealthCheck(routeID string, path string, interval 
 	c.configMu.Unlock()
 
 	cmd := fmt.Sprintf("HEALTH_SET|%s|%s|%s|%s|%s\n", c.sessionID, routeID, path, interval, timeout)
-	c.conn.Write([]byte(cmd))
+	_, _ = c.conn.Write([]byte(cmd))
 
 	if !c.scanner.Scan() {
 		return fmt.Errorf("no response from registry")
@@ -594,7 +594,7 @@ func (c *RegistryClientV2) SetHealthCheck(routeID string, path string, interval 
 // SetRateLimit configures rate limiting for a route
 func (c *RegistryClientV2) SetRateLimit(routeID string, requests int, window string) error {
 	cmd := fmt.Sprintf("RATELIMIT_SET|%s|%s|%d|%s\n", c.sessionID, routeID, requests, window)
-	c.conn.Write([]byte(cmd))
+	_, _ = c.conn.Write([]byte(cmd))
 
 	if !c.scanner.Scan() {
 		return fmt.Errorf("no response from registry")
@@ -611,7 +611,7 @@ func (c *RegistryClientV2) SetRateLimit(routeID string, requests int, window str
 // SetCircuitBreaker configures circuit breaker for a route
 func (c *RegistryClientV2) SetCircuitBreaker(routeID string, threshold int, timeout string, halfOpenRequests int) error {
 	cmd := fmt.Sprintf("CIRCUIT_BREAKER_SET|%s|%s|%d|%s|%d\n", c.sessionID, routeID, threshold, timeout, halfOpenRequests)
-	c.conn.Write([]byte(cmd))
+	_, _ = c.conn.Write([]byte(cmd))
 
 	if !c.scanner.Scan() {
 		return fmt.Errorf("no response from registry")
@@ -628,7 +628,7 @@ func (c *RegistryClientV2) SetCircuitBreaker(routeID string, threshold int, time
 // ValidateConfig validates the staged configuration
 func (c *RegistryClientV2) ValidateConfig() error {
 	cmd := fmt.Sprintf("CONFIG_VALIDATE|%s\n", c.sessionID)
-	c.conn.Write([]byte(cmd))
+	_, _ = c.conn.Write([]byte(cmd))
 
 	if !c.scanner.Scan() {
 		return fmt.Errorf("no response from registry")
@@ -645,7 +645,7 @@ func (c *RegistryClientV2) ValidateConfig() error {
 // ApplyConfig applies all staged configuration changes
 func (c *RegistryClientV2) ApplyConfig() error {
 	cmd := fmt.Sprintf("CONFIG_APPLY|%s\n", c.sessionID)
-	c.conn.Write([]byte(cmd))
+	_, _ = c.conn.Write([]byte(cmd))
 
 	if !c.scanner.Scan() {
 		return fmt.Errorf("no response from registry")
@@ -656,7 +656,7 @@ func (c *RegistryClientV2) ApplyConfig() error {
 		return fmt.Errorf("apply config failed: %s", response)
 	}
 
-	fmt.Printf("[client] Configuration applied\n")
+	fmt.Print("[client] Configuration applied\n")
 
 	// Emit config applied event
 	c.emit(Event{
@@ -671,7 +671,7 @@ func (c *RegistryClientV2) ApplyConfig() error {
 // RollbackConfig discards all staged changes
 func (c *RegistryClientV2) RollbackConfig() error {
 	cmd := fmt.Sprintf("CONFIG_ROLLBACK|%s\n", c.sessionID)
-	c.conn.Write([]byte(cmd))
+	_, _ = c.conn.Write([]byte(cmd))
 
 	if !c.scanner.Scan() {
 		return fmt.Errorf("no response from registry")
@@ -688,7 +688,7 @@ func (c *RegistryClientV2) RollbackConfig() error {
 // ConfigDiff shows differences between staged and active
 func (c *RegistryClientV2) ConfigDiff() (map[string]interface{}, error) {
 	cmd := fmt.Sprintf("CONFIG_DIFF|%s\n", c.sessionID)
-	c.conn.Write([]byte(cmd))
+	_, _ = c.conn.Write([]byte(cmd))
 
 	if !c.scanner.Scan() {
 		return nil, fmt.Errorf("no response from registry")
@@ -702,7 +702,7 @@ func (c *RegistryClientV2) ConfigDiff() (map[string]interface{}, error) {
 
 	var diff map[string]interface{}
 	if len(parts) > 1 {
-		json.Unmarshal([]byte(parts[1]), &diff)
+		_ = json.Unmarshal([]byte(parts[1]), &diff)
 	}
 
 	return diff, nil
@@ -711,7 +711,7 @@ func (c *RegistryClientV2) ConfigDiff() (map[string]interface{}, error) {
 // DrainStart initiates graceful drain
 func (c *RegistryClientV2) DrainStart(durationSeconds int) (time.Time, error) {
 	cmd := fmt.Sprintf("DRAIN_START|%s|%d\n", c.sessionID, durationSeconds)
-	c.conn.Write([]byte(cmd))
+	_, _ = c.conn.Write([]byte(cmd))
 
 	if !c.scanner.Scan() {
 		return time.Time{}, fmt.Errorf("no response from registry")
@@ -735,7 +735,7 @@ func (c *RegistryClientV2) DrainStart(durationSeconds int) (time.Time, error) {
 // DrainStatus gets the current drain status
 func (c *RegistryClientV2) DrainStatus() (map[string]interface{}, error) {
 	cmd := fmt.Sprintf("DRAIN_STATUS|%s\n", c.sessionID)
-	c.conn.Write([]byte(cmd))
+	_, _ = c.conn.Write([]byte(cmd))
 
 	if !c.scanner.Scan() {
 		return nil, fmt.Errorf("no response from registry")
@@ -749,7 +749,7 @@ func (c *RegistryClientV2) DrainStatus() (map[string]interface{}, error) {
 
 	var status map[string]interface{}
 	if len(parts) > 1 {
-		json.Unmarshal([]byte(parts[1]), &status)
+		_ = json.Unmarshal([]byte(parts[1]), &status)
 	}
 
 	return status, nil
@@ -758,7 +758,7 @@ func (c *RegistryClientV2) DrainStatus() (map[string]interface{}, error) {
 // DrainCancel cancels the ongoing drain
 func (c *RegistryClientV2) DrainCancel() error {
 	cmd := fmt.Sprintf("DRAIN_CANCEL|%s\n", c.sessionID)
-	c.conn.Write([]byte(cmd))
+	_, _ = c.conn.Write([]byte(cmd))
 
 	if !c.scanner.Scan() {
 		return fmt.Errorf("no response from registry")
@@ -1032,7 +1032,7 @@ func (c *RegistryClientV2) MaintenanceExitRoute(route string) error {
 // Uses the persistent TCP connection for the query
 func (c *RegistryClientV2) MaintenanceStatus() (map[string]interface{}, error) {
 	cmd := fmt.Sprintf("MAINT_STATUS|%s\n", c.sessionID)
-	c.conn.Write([]byte(cmd))
+	_, _ = c.conn.Write([]byte(cmd))
 
 	if !c.scanner.Scan() {
 		return nil, fmt.Errorf("no response from registry")
@@ -1046,7 +1046,7 @@ func (c *RegistryClientV2) MaintenanceStatus() (map[string]interface{}, error) {
 
 	var status map[string]interface{}
 	if len(parts) > 1 {
-		json.Unmarshal([]byte(parts[1]), &status)
+		_ = json.Unmarshal([]byte(parts[1]), &status)
 	}
 
 	return status, nil
@@ -1055,7 +1055,7 @@ func (c *RegistryClientV2) MaintenanceStatus() (map[string]interface{}, error) {
 // GetStats retrieves statistics for the service
 func (c *RegistryClientV2) GetStats() ([]interface{}, error) {
 	cmd := fmt.Sprintf("STATS_GET|%s\n", c.sessionID)
-	c.conn.Write([]byte(cmd))
+	_, _ = c.conn.Write([]byte(cmd))
 
 	if !c.scanner.Scan() {
 		return nil, fmt.Errorf("no response from registry")
@@ -1069,7 +1069,7 @@ func (c *RegistryClientV2) GetStats() ([]interface{}, error) {
 
 	var stats []interface{}
 	if len(parts) > 1 {
-		json.Unmarshal([]byte(parts[1]), &stats)
+		_ = json.Unmarshal([]byte(parts[1]), &stats)
 	}
 
 	return stats, nil
@@ -1078,7 +1078,7 @@ func (c *RegistryClientV2) GetStats() ([]interface{}, error) {
 // TestBackend tests if a backend is reachable
 func (c *RegistryClientV2) TestBackend(backendURL string) (map[string]interface{}, error) {
 	cmd := fmt.Sprintf("BACKEND_TEST|%s|%s\n", c.sessionID, backendURL)
-	c.conn.Write([]byte(cmd))
+	_, _ = c.conn.Write([]byte(cmd))
 
 	if !c.scanner.Scan() {
 		return nil, fmt.Errorf("no response from registry")
@@ -1092,7 +1092,7 @@ func (c *RegistryClientV2) TestBackend(backendURL string) (map[string]interface{
 
 	var result map[string]interface{}
 	if len(parts) > 1 {
-		json.Unmarshal([]byte(parts[1]), &result)
+		_ = json.Unmarshal([]byte(parts[1]), &result)
 	}
 
 	return result, nil
@@ -1101,7 +1101,7 @@ func (c *RegistryClientV2) TestBackend(backendURL string) (map[string]interface{
 // SessionInfo gets session information
 func (c *RegistryClientV2) SessionInfo() (map[string]interface{}, error) {
 	cmd := fmt.Sprintf("SESSION_INFO|%s\n", c.sessionID)
-	c.conn.Write([]byte(cmd))
+	_, _ = c.conn.Write([]byte(cmd))
 
 	if !c.scanner.Scan() {
 		return nil, fmt.Errorf("no response from registry")
@@ -1115,7 +1115,7 @@ func (c *RegistryClientV2) SessionInfo() (map[string]interface{}, error) {
 
 	var info map[string]interface{}
 	if len(parts) > 1 {
-		json.Unmarshal([]byte(parts[1]), &info)
+		_ = json.Unmarshal([]byte(parts[1]), &info)
 	}
 
 	return info, nil
@@ -1124,7 +1124,7 @@ func (c *RegistryClientV2) SessionInfo() (map[string]interface{}, error) {
 // Ping keeps the connection alive
 func (c *RegistryClientV2) Ping() error {
 	cmd := fmt.Sprintf("PING|%s\n", c.sessionID)
-	c.conn.Write([]byte(cmd))
+	_, _ = c.conn.Write([]byte(cmd))
 
 	if !c.scanner.Scan() {
 		return fmt.Errorf("no response from registry")
@@ -1141,7 +1141,7 @@ func (c *RegistryClientV2) Ping() error {
 // Shutdown gracefully shuts down the service
 func (c *RegistryClientV2) Shutdown() error {
 	cmd := fmt.Sprintf("CLIENT_SHUTDOWN|%s\n", c.sessionID)
-	c.conn.Write([]byte(cmd))
+	_, _ = c.conn.Write([]byte(cmd))
 
 	if !c.scanner.Scan() {
 		return fmt.Errorf("no response from registry")
@@ -1298,11 +1298,11 @@ func (c *RegistryClientV2) reconnectWithBackoff(maxQuickRetries int, ticker **ti
 		// Connection successful - reset to normal behavior
 		c.failureCount = 0
 		if c.inExtendedRetry {
-			fmt.Printf("[client] Connection restored! Returning to normal ping interval\n")
+			fmt.Print("[client] Connection restored! Returning to normal ping interval\n")
 			c.inExtendedRetry = false
 			(*ticker).Reset(normalInterval)
 		}
-		fmt.Printf("[client] Successfully reconnected to registry\n")
+		fmt.Print("[client] Successfully reconnected to registry\n")
 
 		// Emit reconnected event
 		c.emit(Event{
@@ -1335,8 +1335,8 @@ func (c *RegistryClientV2) reconnect() error {
 
 	// Enable TCP keepalive
 	if tcpConn, ok := conn.(*net.TCPConn); ok {
-		tcpConn.SetKeepAlive(true)
-		tcpConn.SetKeepAlivePeriod(30 * time.Second)
+		_ = tcpConn.SetKeepAlive(true)
+		_ = tcpConn.SetKeepAlivePeriod(30 * time.Second)
 	}
 
 	scanner := bufio.NewScanner(conn)
@@ -1344,7 +1344,7 @@ func (c *RegistryClientV2) reconnect() error {
 	// Try to reconnect to existing session first
 	if c.sessionID != "" {
 		reconnectCmd := fmt.Sprintf("RECONNECT|%s\n", c.sessionID)
-		conn.Write([]byte(reconnectCmd))
+		_, _ = conn.Write([]byte(reconnectCmd))
 
 		if scanner.Scan() {
 			response := scanner.Text()
@@ -1372,7 +1372,7 @@ func (c *RegistryClientV2) reconnect() error {
 	// Session not found or expired - do full registration
 	metadataJSON, _ := json.Marshal(c.metadata)
 	registerCmd := fmt.Sprintf("REGISTER|%s|%s|%d|%s\n", c.serviceName, c.instanceName, c.maintenancePort, string(metadataJSON))
-	conn.Write([]byte(registerCmd))
+	_, _ = conn.Write([]byte(registerCmd))
 
 	if !scanner.Scan() {
 		conn.Close()
@@ -1424,7 +1424,7 @@ func (c *RegistryClientV2) replayConfiguration() error {
 	c.configMu.Lock()
 	defer c.configMu.Unlock()
 
-	fmt.Printf("[client] Replaying stored configuration...\n")
+	fmt.Print("[client] Replaying stored configuration...\n")
 
 	// Clear old route IDs
 	c.routeIDs = make(map[string]string)
@@ -1433,7 +1433,7 @@ func (c *RegistryClientV2) replayConfiguration() error {
 	for _, route := range c.storedRoutes {
 		domainStr := strings.Join(route.Domains, ",")
 		cmd := fmt.Sprintf("ROUTE_ADD|%s|%s|%s|%s|%d\n", c.sessionID, domainStr, route.Path, route.BackendURL, route.Priority)
-		c.conn.Write([]byte(cmd))
+		_, _ = c.conn.Write([]byte(cmd))
 
 		if !c.scanner.Scan() {
 			return fmt.Errorf("no response for route add")
@@ -1465,7 +1465,7 @@ func (c *RegistryClientV2) replayConfiguration() error {
 		applied := false
 		for _, newRouteID := range c.routeIDs {
 			cmd := fmt.Sprintf("HEALTH_SET|%s|%s|%s|%s|%s\n", c.sessionID, newRouteID, hc.Path, hc.Interval, hc.Timeout)
-			c.conn.Write([]byte(cmd))
+			_, _ = c.conn.Write([]byte(cmd))
 
 			if !c.scanner.Scan() {
 				return fmt.Errorf("no response for health check")
@@ -1488,7 +1488,7 @@ func (c *RegistryClientV2) replayConfiguration() error {
 	// Re-apply options
 	for key, value := range c.storedOptions {
 		cmd := fmt.Sprintf("OPTIONS_SET|%s|ALL|%s|%s\n", c.sessionID, key, value)
-		c.conn.Write([]byte(cmd))
+		_, _ = c.conn.Write([]byte(cmd))
 
 		if !c.scanner.Scan() {
 			return fmt.Errorf("no response for options set")
@@ -1503,7 +1503,7 @@ func (c *RegistryClientV2) replayConfiguration() error {
 
 	// Apply configuration
 	cmd := fmt.Sprintf("CONFIG_APPLY|%s\n", c.sessionID)
-	c.conn.Write([]byte(cmd))
+	_, _ = c.conn.Write([]byte(cmd))
 
 	if !c.scanner.Scan() {
 		return fmt.Errorf("no response for config apply")
@@ -1514,7 +1514,7 @@ func (c *RegistryClientV2) replayConfiguration() error {
 		return fmt.Errorf("config apply failed: %s", response)
 	}
 
-	fmt.Printf("[client] Configuration replayed and applied successfully\n")
+	fmt.Print("[client] Configuration replayed and applied successfully\n")
 	return nil
 }
 
