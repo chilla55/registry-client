@@ -112,6 +112,78 @@ type RegistryClientV2 struct {
 	// Logging
 	debug     bool   // Enable verbose logging
 	logPrefix string // Prefix for log messages
+
+	// Reconnection control
+	reconnecting bool       // Prevents concurrent reconnection attempts
+	reconnectMu  sync.Mutex // Protects reconnecting flag
+}
+
+// dialWithRetry attempts to dial with exponential backoff, handling DNS resolution failures
+// Retries infinitely with the same pattern as reconnectWithBackoff:
+// - First 5 attempts: exponential backoff (5s, 10s, 15s, 20s, 25s)
+// - After 5 attempts: 1-minute intervals indefinitely
+func (c *RegistryClientV2) dialWithRetry(addr string, attemptOffset int) (net.Conn, error) {
+	const maxQuickRetries = 5
+	attempt := attemptOffset
+
+	for {
+		conn, err := net.Dial("tcp", addr)
+		if err == nil {
+			// Success!
+			if attempt > 1 {
+				fmt.Printf("[client] Successfully connected after %d attempts\n", attempt)
+			}
+			return conn, nil
+		}
+
+		// Check if it's a DNS resolution error (includes "no such host")
+		isDNSError := strings.Contains(err.Error(), "no such host") ||
+			strings.Contains(err.Error(), "Temporary failure in name resolution") ||
+			strings.Contains(err.Error(), "Name or service not known")
+
+		// Calculate retry delay using same logic as reconnectWithBackoff
+		var retryDelay time.Duration
+		if attempt <= maxQuickRetries {
+			// First 5 attempts: exponential backoff (5s, 10s, 15s, 20s, 25s)
+			retryDelay = time.Duration(attempt*5) * time.Second
+		} else {
+			// After 5 failures: 1-minute intervals
+			if attempt == maxQuickRetries+1 {
+				fmt.Printf("[client] Switching to extended retry mode (1-minute intervals)\n")
+
+				// Emit extended retry event
+				c.emit(Event{
+					Type:      EventExtendedRetry,
+					Data:      map[string]interface{}{"interval": "1m0s"},
+					Timestamp: time.Now(),
+				})
+			}
+			retryDelay = 60 * time.Second
+		}
+
+		// Log the failure
+		if isDNSError {
+			fmt.Printf("[client] DNS resolution failed (attempt %d): %v - retrying in %v...\n",
+				attempt, err, retryDelay)
+		} else {
+			fmt.Printf("[client] Connection failed (attempt %d): %v - retrying in %v...\n",
+				attempt, err, retryDelay)
+		}
+
+		// Emit retry event
+		c.emit(Event{
+			Type: EventRetrying,
+			Data: map[string]interface{}{
+				"attempt": attempt,
+				"error":   err.Error(),
+			},
+			Timestamp: time.Now(),
+		})
+
+		// Wait before retry
+		time.Sleep(retryDelay)
+		attempt++
+	}
 }
 
 // getContainerIP detects the container's IP address on the web-net network (10.2.2.0/24)
@@ -209,7 +281,7 @@ func (c *RegistryClientV2) InitWithCleanup(cleanupOldRoutes bool) error {
 
 // connect performs the actual TCP connection and registration
 func (c *RegistryClientV2) connect() error {
-	conn, err := net.Dial("tcp", c.registryAddr)
+	conn, err := c.dialWithRetry(c.registryAddr, 1)
 	if err != nil {
 		return err
 	}
@@ -1220,11 +1292,7 @@ func (c *RegistryClientV2) BuildMaintenanceURL(port string) string {
 
 // StartKeepalive starts the keepalive loop with automatic retry mechanism
 func (c *RegistryClientV2) StartKeepalive() {
-	normalInterval := 30 * time.Second
-	extendedRetryInterval := 60 * time.Second
-	maxQuickRetries := 5
-
-	ticker := time.NewTicker(normalInterval)
+	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
 	for {
@@ -1245,8 +1313,15 @@ func (c *RegistryClientV2) StartKeepalive() {
 					Timestamp: time.Now(),
 				})
 
-				// Try to reconnect with backoff strategy
-				go c.reconnectWithBackoff(maxQuickRetries, &ticker, normalInterval, extendedRetryInterval)
+				// Try to reconnect (only if not already reconnecting)
+				c.reconnectMu.Lock()
+				if !c.reconnecting {
+					c.reconnecting = true
+					c.reconnectMu.Unlock()
+					go c.handleReconnect()
+				} else {
+					c.reconnectMu.Unlock()
+				}
 			} else {
 				// Successful ping - reset failure count
 				if c.failureCount > 0 {
@@ -1254,7 +1329,6 @@ func (c *RegistryClientV2) StartKeepalive() {
 					if c.inExtendedRetry {
 						fmt.Printf("[client] Connection stable, returning to normal ping interval\n")
 						c.inExtendedRetry = false
-						ticker.Reset(normalInterval)
 					}
 				}
 			}
@@ -1264,53 +1338,36 @@ func (c *RegistryClientV2) StartKeepalive() {
 	}
 }
 
-// reconnectWithBackoff attempts to reconnect with exponential backoff
-func (c *RegistryClientV2) reconnectWithBackoff(maxQuickRetries int, ticker **time.Ticker, normalInterval, extendedRetryInterval time.Duration) {
-	attempt := c.failureCount
-	var retryDelay time.Duration
+// handleReconnect manages the reconnection process
+// dialWithRetry will handle all retry logic with exponential backoff
+func (c *RegistryClientV2) handleReconnect() {
+	defer func() {
+		c.reconnectMu.Lock()
+		c.reconnecting = false
+		c.reconnectMu.Unlock()
+	}()
 
-	// First 5 attempts: exponential backoff (5s, 10s, 15s, 20s, 25s)
-	if attempt <= maxQuickRetries {
-		retryDelay = time.Duration(attempt*5) * time.Second
-	} else {
-		// After 5 failures: switch to 1-minute retries
-		if !c.inExtendedRetry {
-			fmt.Printf("[client] Switching to extended retry mode (1-minute intervals)\n")
-			c.inExtendedRetry = true
-			(*ticker).Reset(extendedRetryInterval)
-
-			// Emit extended retry event
-			c.emit(Event{
-				Type:      EventExtendedRetry,
-				Data:      map[string]interface{}{"interval": extendedRetryInterval.String()},
-				Timestamp: time.Now(),
-			})
-		}
-		retryDelay = 5 * time.Second
-	}
-
-	time.Sleep(retryDelay)
-	fmt.Printf("[client] Attempting reconnection (attempt %d, after %v delay)...\n", attempt, retryDelay)
-
+	// reconnect() calls dialWithRetry() which handles infinite retry with backoff
 	if err := c.reconnect(); err != nil {
-		fmt.Printf("[client] Reconnection attempt %d failed: %v\n", attempt, err)
-	} else {
-		// Connection successful - reset to normal behavior
-		c.failureCount = 0
-		if c.inExtendedRetry {
-			fmt.Print("[client] Connection restored! Returning to normal ping interval\n")
-			c.inExtendedRetry = false
-			(*ticker).Reset(normalInterval)
-		}
-		fmt.Print("[client] Successfully reconnected to registry\n")
-
-		// Emit reconnected event
-		c.emit(Event{
-			Type:      EventReconnected,
-			Data:      map[string]interface{}{"attempt": attempt, "session_id": c.sessionID},
-			Timestamp: time.Now(),
-		})
+		// This should never happen since dialWithRetry retries infinitely
+		fmt.Printf("[client] Reconnection failed unexpectedly: %v\n", err)
+		return
 	}
+
+	// Connection successful - reset counters
+	c.failureCount = 0
+	if c.inExtendedRetry {
+		fmt.Print("[client] Connection restored! Returning to normal behavior\n")
+		c.inExtendedRetry = false
+	}
+	fmt.Print("[client] Successfully reconnected to registry\n")
+
+	// Emit reconnected event
+	c.emit(Event{
+		Type:      EventReconnected,
+		Data:      map[string]interface{}{"session_id": c.sessionID},
+		Timestamp: time.Now(),
+	})
 }
 
 // reconnect attempts to reconnect to the registry
@@ -1328,7 +1385,8 @@ func (c *RegistryClientV2) reconnect() error {
 	c.localIP = localIP
 
 	// Establish new TCP connection
-	conn, err := net.Dial("tcp", c.registryAddr)
+	// Use current failure count to continue retry sequence
+	conn, err := c.dialWithRetry(c.registryAddr, c.failureCount)
 	if err != nil {
 		return fmt.Errorf("failed to dial: %w", err)
 	}

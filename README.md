@@ -7,6 +7,7 @@ Shared Go module for service registry communication with go-proxy.
 - **Single Persistent TCP Connection** - All communications use one maintained connection
 - **Event-Driven Architecture** - Zero coupling between services and proxy
 - **Automatic Reconnection** - Exponential backoff with session restoration
+- **Infinite DNS Retry** - Handles temporary DNS failures during container startup with infinite automatic retry
 - **Granular Maintenance Mode** - Control maintenance at service, route, or domain level
 - **IP Change Detection** - Automatic cleanup and re-registration on IP changes
 - **Configuration Persistence** - Routes, health checks, and options survive reconnections
