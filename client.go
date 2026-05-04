@@ -1195,8 +1195,16 @@ func (c *RegistryClientV2) SessionInfo() (map[string]interface{}, error) {
 
 // Ping keeps the connection alive
 func (c *RegistryClientV2) Ping() error {
+	// Set a read deadline so we don't block forever on a half-open connection
+	if tc, ok := c.conn.(interface{ SetReadDeadline(time.Time) error }); ok {
+		_ = tc.SetReadDeadline(time.Now().Add(10 * time.Second))
+		defer func() { _ = tc.SetReadDeadline(time.Time{}) }()
+	}
+
 	cmd := fmt.Sprintf("PING|%s\n", c.sessionID)
-	_, _ = c.conn.Write([]byte(cmd))
+	if _, err := c.conn.Write([]byte(cmd)); err != nil {
+		return fmt.Errorf("ping write failed: %w", err)
+	}
 
 	if !c.scanner.Scan() {
 		return fmt.Errorf("no response from registry")
